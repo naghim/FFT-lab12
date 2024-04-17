@@ -1,14 +1,74 @@
 # Labor 12
 
-## QML 
+## Networking
 
-<p align="justify"> A QML egy deklaratív nyelv, amely lehetővé teszi a felhasználói felületek leírását vizuális összetevőik, valamint az egymással való kölcsönhatás és kapcsolat szempontjából. Ez egy jól olvasható, JSON-szerű szintaxist használó nyelv, amelyet arra terveztek, hogy lehetővé tegye a komponensek dinamikus összekapcsolását, könnyű újrafelhasználását és testreszabását. A QtQuick modul használatával a tervezők és fejlesztők könnyedén felépíthetik az animált felhasználói felületeket QML-ben, és összekapcsolhatják ezeket bármely C++ backend könyvtárakkal. A Qt Quick a QML típusainak és funkcionalitásának szabványkönyvtára. Ez magában foglalja a vizuális típusokat, az interaktív típusokat, az animációkat, a modelleket és a nézeteket, a részecske (<i>particle</i>) és az árnyékoló (<i>shader</i>) effektusokat. </p>
+<p align="justify"> A Qt-ban lehetőség adódik az internetről letölteni különféle adatokat. Akár JSON objektumokat, akár nagy méretű állományokat szeretnénk letölteni, használhatjuk a Qt-ban a <a href="https://doc.qt.io/qt-6/qtnetwork-index.html">network modult</a>. A network modul támogatja a sima socket alapú kommunikációkat, illetve a HTTP(s) alapú kapcsolatokat is.</p>
+
+<p align="justify">A network modul használatához szükséges beilleszteni a projekt állományba, amely qmake esetén a következő módon történik:</p>
+
+```qmake
+QT += network
+```
+
+<p align="justify">CMake használata esetén:</p>
+
+```cmakelists
+find_package(Qt6 REQUIRED COMPONENTS Network)
+target_link_libraries(mytarget PRIVATE Qt6::Network)
+```
+
+<p align="justify">A network modull aszinkron módon végzi el a hálózati hívásokat, így nem veszi el a felhasználói felülettől a futtatási jogot (nem blokkolja a Qt main threadet). Ahhoz, hogy választ kapjunk a network modulltól, használhatjuk a <a href="https://doc.qt.io/qt-6/qnetworkreply.html#signals">QNetworkReply által szolgáltatott eseményeket</a>. Ha nagyobb állományt töltünk le, használhatjuk a <a href="https://doc.qt.io/qt-6/qnetworkreply.html#downloadProgress">downloadProgress</a> nevű eseményt, hogy valós időben visszajelzést kapjunk a letöltés állapotáról. A <a href="https://doc.qt.io/qt-6/qnetworkreply.html#finished">finished</a> esemény segítségével le tudunk futtatni saját kódot, amennyiben véget ért a letöltés.</p>
+
+Példa JSON adatok letöltésére és feldolgozására, publikus API-t felhasználva:
+
+```cpp
+// Lekérjük a hőmérsékletet egy publikus API-ról
+QNetworkAccessManager manager;
+QNetworkRequest request;
+QUrl url = QUrl("https://wttr.in/Targu+Mures?format=j1");
+request.setUrl(url);
+QNetworkReply *reply = manager.get(request);
+
+// A network modul aszinkron módon kéri le az adatokat.
+// Ezért szükséges rácsatlakoznunk egy callback függvénnyel
+// Qt-ben ezt az eventekkel valósítjuk meg
+QObject::connect(reply, &QNetworkReply::finished, [&]() {
+    // Ha nem történt hiba a kérés során...
+    if (reply->error() == QNetworkReply::NoError) {
+        // Beolvassuk a HTTP kérésből a választ
+        QByteArray responseData = reply->readAll();
+
+        // A választ alakítsuk át JSON objektummá, hogy könnyebben tudjuk feldolgozni
+        QJsonDocument jsonResponse = QJsonDocument::fromJson(responseData);
+        QJsonObject jsonObject = jsonResponse.object();
+
+        // Ez a lista tartalmazza az eddig mért időjárásokat
+        QJsonArray currentCondition = jsonObject.value("current_condition").toArray();
+
+        // A legelső érték a JSON listában a legújabb időjárás
+        QJsonObject firstCondition = currentCondition.first().toObject();
+
+        int tempC = firstCondition.value("temp_C").toString().toInt();
+        QJsonObject weatherDesc = firstCondition.value("weatherDesc").toArray().first().toObject();
+        QString weatherDescription = weatherDesc.value("value").toString();
+
+        qDebug() << "Hőmérséklet Celsiusban: " << tempC;
+        qDebug() << "Időjárás leírása:" << weatherDescription;
+    } else {
+        // Ha történt hiba, írjuk ki a felhasználónak
+        qDebug() << "Error:" << reply->errorString();
+    }
+
+    reply->deleteLater();
+});
+```
+
+<p align="justify">A linkre kattintva megtekinthető a böngészőben is, hogy hogyan néz ki ez a JSON válasz: <a href="https://wttr.in/Targu+Mures?format=j1">https://wttr.in/Targu+Mures?format=j1</a>.</p>
+
+<p align="justify">Qt-ben nagyon egyszerű az objektumok animálása is. Az animációkra használhatóak a <a href="https://doc.qt.io/qt-6/qpropertyanimation.html">QPropertyAnimation</a>, amelynek meg lehet adni, hogy honnan kezdődjön az animáció, hol végződjön az animáció, milyen sebességgel történjen, és milyen görbét írjon le az animáció (például <a href="https://doc.qt.io/qt-6/qeasingcurve.html">QEasingCurve</a>). A <a href="https://doc.qt.io/qt-6/qpropertyanimation.html">QPropertyAnimation</a> segítségével az objektumunk egy bizonyos tulajdonságát módosítjuk az idő függvényében, mint például a pozícióját vagy az elforgatási szögét.</p>
 
 ## Feladatok
-1. Implementáljuk egy Quick (C++/QML – nem widgets) számológép alkalmazást. [Segítség](https://doc.qt.io/qt-5/qtdoc-demos-calqlatr-example.html)
-2. Implementáljunk egy időjárás információ Quick alkalmazást. Az információ lekérésére használjuk az [OpenWeatherMap](https://openweathermap.org/api) API-t. [Segítség](https://doc.qt.io/qt-5/qtpositioning-weatherinfo-example.html)
- 
-<p align=center> <img src="https://i.ibb.co/SXwQvks/calqltr.png" align="center" width="200px"> <img src="https://i.ibb.co/vLwwDSZ/weatheringwithyou.png" align="center" width="180px"> </p>
 
-3. _Aim Lab._ Készítsünk egy "játékot", melyben egy egérrel mozgatott célkereszt segítségével, különböző színű és méretű, a képernyőn véletlenszerűen mozgó körökre vadászunk és "lövünk". Egy körnek a mozgási sebességet és pontértékét a színe határozza meg. A köröknek az átmérője és áttetszősége (alpha kanális) idővel csökken, így nehezebb őket eltalálni és egy idő után teljesen eltűnnek. Mindig van egy tiltott (nem szabad meglőni) és egy kritikus (nem szabad elszalasztani) szín, ezek véletlenszerűen, időközönként változnak. Minden hibánál (tiltott megjövése, kritikus elszalasztása), veszítünk egy életet. A játéknak akkor van vége, ha elfogynak az életeink, amiből a játék indulásakor három van. További életeket gyűjthetünk, egy ritkán megjelenő és hamar elillanó, kicsi méretű, és rögzített irányban gyorsan mozgó kocka eltalálásával. A játékban opcionálisan hangeffektusokat (https://freesound.org) is lejátszhatunk a  [```QSound::play()```](https://doc.qt.io/qt-5/qsound.html) segítségével. (_Nem_ kell QML-lel megoldalni a feladatot) 
+1. Készítsünk egy kezdetleges időjárást szemléltető applikációt! Használjuk a fent említett <a href="https://wttr.in/Targu+Mures?format=j1">wttr.in</a> publikus API-t. Jelenítsük meg a mért hőmérsékletet Celsius fokban, a mérés idejét, a légnedvességet (humidity) és az érzékelt hőmérsékletet Celsius fokban (feels like C). A felhasználói felületen jelenítsük meg az időjáráshoz megfelelő ikont és leírást is, illetve animáljuk meg az ikont (például napos idő esetén a nap forogjon körbe-körbe).
 
+2. Készítsünk egy alkalmazást, amely segítségével letölthetünk HTTP(s) segítségével egy nagyobb méretű állományt. A letöltendő linket adjuk meg egy <a href="https://doc.qt.io/qt-6/qlineedit.html">QLineEdit</a> segítségével. A letöltés státuszát jelenítsük meg egy <a  href="https://doc.qt.io/qt-6/qprogressbar.html">QProgressBar</a> segítségével a felhasználónak! A sikeres letöltés esetén jelenítsünk meg egy <a href="https://doc.qt.io/qt-6/qmessagebox.html">QMessageBox</a>-ot. Sikertelen letöltés esetén ugyancsak egy <a href="https://doc.qt.io/qt-6/qmessagebox.html">QMessageBox</a> segítségével informáljuk a felhasználót.
